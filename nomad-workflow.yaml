@@ -1,0 +1,156 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: nomad-workflow-template-
+spec:
+  entrypoint: nomad-workflow
+  onExit: exit-handler
+  arguments:
+    parameters:
+    - name: slice
+      value: slice1
+    - name: nomad_address
+      value: "http://host.docker.internal:4646"
+# Not working in this version of Argo
+#  synchronization:
+#     mutex:
+#       name: "{{workflow.parameters.slice}}"
+  templates:
+  - name: nomad-workflow
+    steps:
+    - - name: test-start
+        template: whalesay
+        arguments:
+          parameters:
+          - name: message
+            value: "Test starting!"
+    - - name: service1
+        template: nomad-start-service-and-wait
+        arguments:
+          parameters:
+          - name: service
+            value: "service1"
+      - name: service2
+        template: nomad-start-service-and-wait
+        arguments:
+          parameters:
+          - name: service
+            value: "service2"
+    - - name: service3
+        template: nomad-start-service-and-wait
+        arguments:
+          parameters:
+          - name: service
+            value: "service3"
+    - - name: delay
+        template: delay
+    - - name: test-passed
+        template: whalesay
+        arguments:
+          parameters:
+          - name: message
+            value: "Test passed!"
+
+  - name: exit-handler
+    steps:
+    - - name: service1-stop
+        template: nomad-stop-service
+        arguments:
+          parameters:
+          - name: service
+            value: "service1"
+      - name: service2-stop
+        template: nomad-stop-service
+        arguments:
+          parameters:
+          - name: service
+            value: "service2"
+      - name: service3-stop
+        template: nomad-stop-service
+        arguments:
+          parameters:
+          - name: service
+            value: "service3"
+
+  - name: nomad-start-service-and-wait
+    inputs:
+      parameters:
+      - name: service
+    steps:
+    - - name: service-start
+        template: nomad-start-service
+        arguments:
+          parameters:
+          - name: service
+            value: "{{inputs.parameters.service}}"
+    - - name: service-wait
+        template: nomad-wait-for-service-ready
+        arguments:
+          parameters:
+          - name: service
+            value: "{{inputs.parameters.service}}"
+
+  - name: delay
+    suspend:
+      duration: "5"
+
+  - name: whalesay
+    inputs:
+      parameters:
+      - name: message
+    container:
+      image: docker/whalesay
+      command: [cowsay]
+      args: ["{{inputs.parameters.message}}"]
+
+  - name: nomad-start-service
+    inputs:
+      parameters:
+      - name: service
+    script:
+      image: hendrikmaus/nomad-cli
+      command: [sh]
+      source: |
+        nomad job run - <<'END'
+        job "{{inputs.parameters.service}}" {
+          datacenters = ["dc1"]
+          group "{{inputs.parameters.service}}" {
+            task "{{inputs.parameters.service}}" {
+              driver = "docker"
+              config {
+                image = "centos"
+                command = "bash"
+                args = ["-c", "echo hello; sleep 15; echo '{{inputs.parameters.service}} ready!'; sleep 600"]
+              }
+            }
+          }
+        }
+        END
+      env:
+      - name: NOMAD_ADDR
+        value: "{{workflow.parameters.nomad_address}}"
+
+  - name: nomad-wait-for-service-ready
+    inputs:
+      parameters:
+      - name: service
+    script:
+      image: hendrikmaus/nomad-cli
+      command: [sh]
+      source: |
+        while ! nomad alloc logs -job '{{inputs.parameters.service}}' | fgrep -m1 ready; do sleep 1; done
+      env:
+      - name: NOMAD_ADDR
+        value: "{{workflow.parameters.nomad_address}}"
+
+  - name: nomad-stop-service
+    inputs:
+      parameters:
+      - name: service
+    container:
+      image: hendrikmaus/nomad-cli
+      command: [nomad]
+      args: ["job", "stop", "{{inputs.parameters.service}}"]
+      env:
+      - name: NOMAD_ADDR
+        value: "{{workflow.parameters.nomad_address}}"
