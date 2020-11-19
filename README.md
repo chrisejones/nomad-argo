@@ -31,7 +31,7 @@ Run a nomad instance on your host machine. It's available in Homebrew otherwise 
 nomad agent -dev
 ```
 
-This workflow does an integration test. Starting a few dummy services with Nomad in a particular order and checking the logs to see if they've started.
+This workflow does an integration test. It starts a few dummy services with Nomad in a particular order and checks the logs to see if they've started.
 ```
 argo submit -n argo --watch https://raw.githubusercontent.com/chrisejones/nomad-argo/main/nomad-workflow.yaml
 ```
