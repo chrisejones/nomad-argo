@@ -3,6 +3,7 @@
 ## Introduction
 This repo contains an [Argo Workflow](https://argoproj.github.io/projects/argo/) that demonstrates using Argo to deploy services on [Nomad](https://www.nomadproject.io/).
 
+## Getting Started
 I've tested this with Mac and WSL2 Docker Desktop. Before starting enable Kubernetes in Docker Desktop settings.
 
 Set up Argo as specified in the docs, which I've duplicated below.
